@@ -229,7 +229,13 @@
             timerId = setInterval(triggerReminder, settings.intervalMinutes * 60 * 1000);
         }
     }
-
+// Keyboard Shortcut: Alt + F
+    window.addEventListener('keydown', function(e) {
+        if (e.altKey && (e.key === 'f' || e.key === 'F')) {
+            e.preventDefault();
+            triggerReminder();
+        }
+    });
     companion.addEventListener('contextmenu', function(e) {
         e.preventDefault();
         modal.style.display = 'block';
