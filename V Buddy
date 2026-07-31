@@ -25,7 +25,7 @@
     wave: {
       id: 'wave',
       name: 'Wave',
-      url: 'https://raw.githubusercontent.com/YOUR_USER/YOUR_REPO/main/wave.webm',
+      url: 'https://github.com/Piyush230140/PB-V/blob/main/Greeting%20Wave.gif',
       type: 'greeting',
     },
     headTilt: {
