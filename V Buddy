@@ -31,19 +31,19 @@
     headTilt: {
       id: 'headTilt',
       name: 'Head Tilt',
-      url: 'https://raw.githubusercontent.com/YOUR_USER/YOUR_REPO/main/head_tilt.webm',
+      url: 'https://github.com/Piyush230140/PB-V/blob/main/Greeting%20HeadTilt.gif',
       type: 'greeting',
     },
     happyBounce: {
       id: 'happyBounce',
       name: 'Happy Bounce',
-      url: 'https://raw.githubusercontent.com/YOUR_USER/YOUR_REPO/main/happy_bounce.webm',
+      url: 'https://github.com/Piyush230140/PB-V/blob/main/Greeting%20Happy%20Bounce.gif',
       type: 'greeting',
     },
     drinkWater: {
       id: 'drinkWater',
       name: 'Drink Water',
-      url: 'https://raw.githubusercontent.com/YOUR_USER/YOUR_REPO/main/drink_water.webm',
+      url: 'https://github.com/Piyush230140/PB-V/blob/main/Drinking%20water.gif',
       type: 'drink',
     },
   };
