@@ -20,7 +20,7 @@
   const DEFAULT_GREETING_POOL = [
     "You're beautiful Varshiii! 💙",
     "Have a wonderful day Madam! ☀️",
-    "You've got this yedeyy! 💪",
+    "You've got this Varshaa! 💪",
     "Hello there princess! 👋",
     "You slay You DIVA! 😊",
     "Hope you're having a good day!",
