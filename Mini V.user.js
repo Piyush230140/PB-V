@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixel Buddy
 // @namespace    http://tampermonkey.net/
-// @version      3.12.1
+// @version      3.13.0
 // @description  Desktop companion -- real GIF animations, speech bubbles, smart reminders
 // @match        *://*/*
 // @grant        GM_setValue
@@ -16,691 +16,987 @@
   if (window !== window.top) return;
   if (document.getElementById('pb-pet')) return;
 
-  // DEFAULT MESSAGE POOLS (fallback when user has no custom messages saved)
   const DEFAULT_GREETING_POOL = [
-    "You're beautiful Varshiii! 💙",
-    "Have a wonderful day Madam! ☀️",
-    "You've got this Varshaa! 💪",
-    "Hello there princess! 👋",
-    "You slay You DIVA! 😊",
-    "Hope you're having a good day!",
-    "You're doing amazing! ✨",
-    "Keep up the great work! 🌟",
-    "Smile! It suits you the most! 😄",
-    "Today is your day bitch, own it! 🎉"
+    "You're beautiful! \ud83d\udc99","Have a wonderful day! \u2600\ufe0f","You've got this! \ud83d\udcaa",
+    "Hello there! \ud83d\udc4b","Great to see you! \ud83d\ude0a","Hope you're having a good day!",
+    "You're doing amazing! \u2728","Keep up the great work! \ud83c\udf1f",
+    "Smile! You deserve it! \ud83d\ude04","Today is your day! \ud83c\udf89"
   ];
   const DEFAULT_DRINK_POOL = [
-    "Drink some NILUU! 💧",
-    "Stay hydrated Sethh! 💦",
-    "Time for a water break You Hardworker! 🥤",
-    "Don't forget to drink water V!",
-    "Your body needs water and vitamin me! 💧",
-    "Hydration is key to the lock of washroom! 🌊",
-    "Take a sip Queen!!!"
+    "Drink some water! \ud83d\udca7","Stay hydrated! \ud83d\udca6","Time for a water break! \ud83e\udd64",
+    "Don't forget to drink water!","Your body needs water! \ud83d\udca7",
+    "Hydration is key! \ud83c\udf0a","Take a sip! \ud83d\udca6"
   ];
   const DEFAULT_SLEEP_POOL = [
-    "Time to rest your eyes! 😴",
-    "Take a break! 🌙",
-    "Maybe it's time to sleep? 💤",
-    "Rest is important too yedeyy! 🌛",
-    "Your eyes need rest! 👀"
+    "Time to rest your eyes! \ud83d\ude34","Take a break! \ud83c\udf19",
+    "Maybe it's time to sleep? \ud83d\udca4","Rest is important too! \ud83c\udf1b","Your eyes need rest! \ud83d\udc40"
   ];
 
-  // DEFAULT SETTINGS
   const DEFAULT_SETTINGS = {
-    general:    { enabled: true, name: 'Pixel Buddy', showOnAllSites: true, shortcut: 'Alt+V' },
+    general:    { enabled: true, name: 'Pixel Buddy', showOnAllSites: true, shortcut: 'Alt+V', bubbleEnabled: true },
     timings:    { greetingInterval: 30, drinkInterval: 60, animationDuration: 9.5, bubbleDuration: 7 },
-    messages:   {
-      greetingEnabled: true, drinkEnabled: true, sleepEnabled: true,
-      greetingPool: DEFAULT_GREETING_POOL.slice(),
-      drinkPool:    DEFAULT_DRINK_POOL.slice(),
-      sleepPool:    DEFAULT_SLEEP_POOL.slice()
-    },
+    messages:   { greetingEnabled: true, drinkEnabled: true, sleepEnabled: true,
+                  greetingPool: DEFAULT_GREETING_POOL.slice(),
+                  drinkPool:    DEFAULT_DRINK_POOL.slice(),
+                  sleepPool:    DEFAULT_SLEEP_POOL.slice() },
     animations: { wave: true, headtilt: true, happybounce: true, drinkwater: true },
-    behaviour:  { soundEnabled: false, showOnStartup: true }
+    appearance: { petSize: 160, petOpacity: 1, position: 'bottom-right' },
+    behaviour:  { soundEnabled: false, showOnStartup: false }
   };
-  // STORAGE MANAGER
+
   class StorageManager {
-    static KEY = 'pb_settings_v4';
+    static KEY = 'pb_settings_v5';
     static load() {
       try {
-        const raw = GM_getValue(StorageManager.KEY, null);
-        if (!raw) return JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
-        const saved = JSON.parse(raw);
-        const out   = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
-        for (const k of Object.keys(DEFAULT_SETTINGS))
-          if (saved[k] && typeof saved[k] === 'object') Object.assign(out[k], saved[k]);
-        const anyAnim = Object.keys(DEFAULT_SETTINGS.animations).some(k => out.animations[k]);
-        if (!anyAnim) {
-          console.warn('[PixelBuddy] all animations disabled — resetting to defaults');
-          Object.assign(out.animations, DEFAULT_SETTINGS.animations);
+        const raw5 = GM_getValue(StorageManager.KEY, null);
+        if (raw5) {
+          const saved = JSON.parse(raw5);
+          const out = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+          for (const k of Object.keys(DEFAULT_SETTINGS))
+            if (saved[k] && typeof saved[k] === 'object') Object.assign(out[k], saved[k]);
+          StorageManager._guard(out); return out;
         }
-        // Ensure pools are arrays (old saves had only booleans in messages)
-        if (!Array.isArray(out.messages.greetingPool)) out.messages.greetingPool = DEFAULT_GREETING_POOL.slice();
-        if (!Array.isArray(out.messages.drinkPool))    out.messages.drinkPool    = DEFAULT_DRINK_POOL.slice();
-        if (!Array.isArray(out.messages.sleepPool))    out.messages.sleepPool    = DEFAULT_SLEEP_POOL.slice();
-        console.log('[PixelBuddy] settings loaded');
-        return out;
+        const raw4 = GM_getValue('pb_settings_v4', null);
+        if (raw4) {
+          const v4 = JSON.parse(raw4);
+          const out = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+          for (const k of ['timings','messages','animations'])
+            if (v4[k]) Object.assign(out[k], v4[k]);
+          if (v4.general) {
+            const { name, showOnAllSites, shortcut } = v4.general;
+            if (name)                          out.general.name = name;
+            if (showOnAllSites !== undefined)  out.general.showOnAllSites = showOnAllSites;
+            if (shortcut)                      out.general.shortcut = shortcut;
+          }
+          out.behaviour.showOnStartup = false;
+          StorageManager._guard(out);
+          StorageManager.save(out); return out;
+        }
+        return JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
       } catch(e) { return JSON.parse(JSON.stringify(DEFAULT_SETTINGS)); }
+    }
+    static _guard(out) {
+      if (!out.appearance) out.appearance = JSON.parse(JSON.stringify(DEFAULT_SETTINGS.appearance));
+      if (!Array.isArray(out.messages.greetingPool)) out.messages.greetingPool = DEFAULT_GREETING_POOL.slice();
+      if (!Array.isArray(out.messages.drinkPool))    out.messages.drinkPool    = DEFAULT_DRINK_POOL.slice();
+      if (!Array.isArray(out.messages.sleepPool))    out.messages.sleepPool    = DEFAULT_SLEEP_POOL.slice();
+      if (!Object.keys(DEFAULT_SETTINGS.animations).some(k => out.animations[k]))
+        Object.assign(out.animations, DEFAULT_SETTINGS.animations);
     }
     static save(s) { GM_setValue(StorageManager.KEY, JSON.stringify(s)); }
   }
 
-  // MESSAGE MANAGER
-  // Reads from live settings.messages.*Pool so custom messages work without restart.
   class MessageManager {
+    static Q_KEY = 'pb_msg_q_v1';
     constructor(settings) {
-      this._s       = settings;
-      this._recent  = {};
-      this._maxRecent = 3;
+      this._s = settings; this._q = {};
+      try { const r = GM_getValue(MessageManager.Q_KEY, null); if (r) this._q = JSON.parse(r); } catch(e) {}
+    }
+    _shuffle(a) {
+      const b = [...a];
+      for (let i = b.length-1; i > 0; i--) { const j = Math.floor(Math.random()*(i+1)); [b[i],b[j]]=[b[j],b[i]]; }
+      return b;
     }
     _pick(cat) {
-      const pool = (this._s.messages[cat + 'Pool'] || []).filter(m => m && m.trim());
-      const src0 = pool.length ? pool :
-                   (cat === 'drink' ? DEFAULT_DRINK_POOL :
-                    cat === 'sleep' ? DEFAULT_SLEEP_POOL : DEFAULT_GREETING_POOL);
-      if (!this._recent[cat]) this._recent[cat] = [];
-      const avail = src0.filter(m => !this._recent[cat].includes(m));
-      const src   = avail.length ? avail : src0;
-      const msg   = src[Math.floor(Math.random() * src.length)];
-      this._recent[cat].push(msg);
-      if (this._recent[cat].length > this._maxRecent) this._recent[cat].shift();
+      const pool = (this._s.messages[cat+'Pool']||[]).filter(m => m && m.trim());
+      const src  = pool.length ? pool : (cat==='drink'?DEFAULT_DRINK_POOL:cat==='sleep'?DEFAULT_SLEEP_POOL:DEFAULT_GREETING_POOL);
+      if (!this._q[cat] || !this._q[cat].length || !this._q[cat].some(m => src.includes(m)))
+        this._q[cat] = this._shuffle(src);
+      const msg = this._q[cat].shift();
+      GM_setValue(MessageManager.Q_KEY, JSON.stringify(this._q));
       return msg;
     }
     getGreetingMessage() { return this._pick('greeting'); }
     getDrinkMessage()    { return this._pick('drink'); }
     getSleepMessage()    { return this._pick('sleep'); }
+    resetQueues()        { this._q = {}; GM_setValue(MessageManager.Q_KEY, '{}'); }
   }
 
-  // WATER TRACKER
-  // Daily drink count; resets automatically at midnight.
   class WaterTracker {
     static KEY = 'pb_water_v1';
-    static _today() { return new Date().toISOString().slice(0, 10); }
-    static getCount() {
-      try {
-        const raw = GM_getValue(WaterTracker.KEY, null);
-        if (!raw) return 0;
-        const d = JSON.parse(raw);
-        return d.date === WaterTracker._today() ? (d.count || 0) : 0;
-      } catch(e) { return 0; }
-    }
-    static increment() {
-      const count = WaterTracker.getCount() + 1;
-      GM_setValue(WaterTracker.KEY, JSON.stringify({ date: WaterTracker._today(), count }));
-      return count;
-    }
+    constructor() { this._count = parseInt(GM_getValue(WaterTracker.KEY,'0'),10)||0; }
+    increment() { this._count++; GM_setValue(WaterTracker.KEY,String(this._count)); return this._count; }
+    getCount()  { return this._count; }
+    reset()     { this._count=0; GM_setValue(WaterTracker.KEY,'0'); }
   }
 
-  // ANIMATION MANAGER
   class AnimationManager {
-    static REGISTRY = {
-      wave:        { label: 'Greeting Wave',  category: 'greeting' },
-      headtilt:    { label: 'Head Tilt',      category: 'greeting' },
-      happybounce: { label: 'Happy Bounce',   category: 'greeting' },
-      drinkwater:  { label: 'Drink Water',    category: 'drink'    },
-    };
-    static DIRECT_URLS = {
-      wave:        'https://raw.githubusercontent.com/Piyush230140/PB-V/main/pb-wave.webp',
-      headtilt:    'https://raw.githubusercontent.com/Piyush230140/PB-V/main/pb-headtilt.webp',
-      happybounce: 'https://raw.githubusercontent.com/Piyush230140/PB-V/main/pb-happybounce.webp',
-      drinkwater:  'https://raw.githubusercontent.com/Piyush230140/PB-V/main/pb-drinkwater.webp',
-    };
-    constructor(settings, onReady) {
-      this._s       = settings;
-      this._urls    = {};
-      this._timer   = null;
-      this._current = null;
-      const keys  = Object.keys(AnimationManager.REGISTRY);
-      let loaded  = 0;
-      const total = keys.length;
-      for (const key of keys) {
-        this._urls[key] = null;
-        GM_xmlhttpRequest({
-          method: 'GET',
-          url: AnimationManager.DIRECT_URLS[key],
-          responseType: 'blob',
-          onload: (r) => {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-              this._urls[key] = reader.result;
-              console.log('[PixelBuddy] ready:', key);
-              if (++loaded === total && onReady) onReady();
-            };
-            reader.readAsDataURL(r.response);
-          },
-          onerror: () => {
-            console.warn('[PixelBuddy] failed:', key);
-            if (++loaded === total && onReady) onReady();
-          },
-        });
-      }
+    static BASE  = 'https://raw.githubusercontent.com/Piyush230140/PB-V/main/';
+    static CATS  = { greeting:['wave','headtilt','happybounce'], drink:['drinkwater'] };
+    static URLS  = { wave:'pb-wave.webp', headtilt:'pb-headtilt.webp', happybounce:'pb-happybounce.webp', drinkwater:'pb-drinkwater.webp' };
+    static Q_KEY = 'pb_anim_q_v1';
+
+    constructor(settings, imgEl) {
+      this._s=settings; this._img=imgEl; this._q={}; this._t=null;
+      try { const r=GM_getValue(AnimationManager.Q_KEY,null); if(r) this._q=JSON.parse(r); } catch(e){}
     }
-    getByCategory(cat) {
-      return Object.entries(AnimationManager.REGISTRY)
-        .filter(([k, v]) => v.category === cat && this._s.animations[k])
-        .map(([k]) => k);
+    _shuffle(a) {
+      const b=[...a];
+      for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];}
+      return b;
     }
-    pickRandom(keys) { return keys[Math.floor(Math.random() * keys.length)]; }
-    play(key, imgEl, onDone, duration) {
-      this.stop();
-      const url = this._urls[key];
-      const ms  = (duration || 9.5) * 1000;
-      if (!url) { this._timer = setTimeout(() => { if (onDone) onDone(); }, ms); return; }
-      this._current = key;
-      // Hide the img briefly while swapping src — prevents broken-image white-dot flash
-      imgEl.style.visibility = 'hidden';
-      imgEl.removeAttribute('src');
-      setTimeout(() => {
-        imgEl.src = url;
-        imgEl.style.visibility = '';
-        this._timer = setTimeout(() => { this._current = null; if (onDone) onDone(); }, ms);
-      }, 50);
+    _enabled(cat) {
+      const keys=AnimationManager.CATS[cat]||[];
+      const en=keys.filter(k=>this._s.animations[k]!==false);
+      return en.length?en:keys;
+    }
+    pickFromCategory(cat) {
+      const pool=this._enabled(cat);
+      if(!this._q[cat]||!this._q[cat].length||!this._q[cat].some(k=>pool.includes(k)))
+        this._q[cat]=this._shuffle(pool);
+      const key=this._q[cat].shift();
+      GM_setValue(AnimationManager.Q_KEY,JSON.stringify(this._q));
+      return key;
+    }
+    resetQueues() { this._q={}; GM_setValue(AnimationManager.Q_KEY,'{}'); }
+    play(key, duration, onDone) {
+      if(this._t){clearTimeout(this._t);this._t=null;}
+      const url=AnimationManager.BASE+(AnimationManager.URLS[key]||'pb-wave.webp');
+      this._img.src=url;
+      this._img.style.display='block';
+      this._img.style.opacity='0';
+      requestAnimationFrame(()=>{ this._img.style.opacity='1'; });
+      this._t=setTimeout(()=>{
+        this._img.style.opacity='0';
+        setTimeout(()=>{
+          this._img.style.display='none'; this._img.src=''; this._t=null;
+          if(onDone) onDone();
+        },400);
+      }, duration*1000);
     }
     stop() {
-      if (this._timer) { clearTimeout(this._timer); this._timer = null; }
-      this._current = null;
+      if(this._t){clearTimeout(this._t);this._t=null;}
+      this._img.style.opacity='0';
+      setTimeout(()=>{this._img.style.display='none';this._img.src='';},400);
     }
   }
 
-  // SPEECH BUBBLE MANAGER
   class SpeechBubbleManager {
-    constructor(el) { this._el = el; this._timer = null; }
-    // Plain text bubble (greetings)
+    constructor(el) { this._el=el; this._t=null; }
     show(text, duration) {
-      clearTimeout(this._timer);
-      this._el.classList.remove('pb-bubble--interactive');
-      this._el.textContent = text;
-      this._el.classList.add('pb-bubble--visible');
-      if (duration > 0) this._timer = setTimeout(() => this.hide(), duration * 1000);
+      if(this._t){clearTimeout(this._t);this._t=null;}
+      this._el.innerHTML = '<span>'+text+'</span>';
+      this._el.style.display='block';
+      requestAnimationFrame(()=>{ this._el.style.opacity='1'; });
+      this._t=setTimeout(()=>this.hide(), duration*1000);
     }
-    // Rich HTML bubble with action buttons (drink reminders)
-    showWithActions(html, duration) {
-      clearTimeout(this._timer);
-      this._el.innerHTML = html;
-      this._el.classList.add('pb-bubble--visible', 'pb-bubble--interactive');
-      if (duration > 0) this._timer = setTimeout(() => this.hide(), duration * 1000);
+    showWithActions(text, duration, onDone, onSnooze) {
+      if(this._t){clearTimeout(this._t);this._t=null;}
+      this._el.innerHTML =
+        '<span>'+text+'</span>'+
+        '<div class="pb-bubble-actions">'+
+          '<button class="pb-bubble-btn pb-btn-done">Done</button>'+
+          '<button class="pb-bubble-btn pb-btn-snooze">Remind in 5</button>'+
+        '</div>';
+      this._el.style.display='block';
+      requestAnimationFrame(()=>{ this._el.style.opacity='1'; });
+      this._el.querySelector('.pb-btn-done').addEventListener('click', ()=>{
+        this.hide(); if(onDone) onDone();
+      });
+      this._el.querySelector('.pb-btn-snooze').addEventListener('click', ()=>{
+        this.hide(); if(onSnooze) onSnooze();
+      });
+      this._t=setTimeout(()=>this.hide(), duration*1000);
     }
     hide() {
-      clearTimeout(this._timer);
-      this._el.classList.remove('pb-bubble--visible', 'pb-bubble--interactive');
-      setTimeout(() => { this._el.innerHTML = ''; }, 350);
+      if(this._t){clearTimeout(this._t);this._t=null;}
+      this._el.style.opacity='0';
+      setTimeout(()=>{ this._el.style.display='none'; this._el.innerHTML=''; },400);
     }
   }
 
-  // REMINDER MANAGER
   class ReminderManager {
-    constructor(settings, onGreet, onDrink) {
-      this._s = settings; this._onGreet = onGreet; this._onDrink = onDrink;
-      this._gt = null; this._dt = null; this._running = false;
+    constructor(onGreeting, onDrink) { this._og=onGreeting; this._od=onDrink; this._gt=null; this._dt=null; }
+    start(s) {
+      this.stop();
+      this._gt=setInterval(this._og,(s.timings.greetingInterval||30)*60000);
+      this._dt=setInterval(this._od,(s.timings.drinkInterval||60)*60000);
     }
-    start() { if (this._running) return; this._running = true; this._sg(); this._sd(); }
-    stop()  { this._running = false; clearTimeout(this._gt); clearTimeout(this._dt); }
-    _sg() {
-      if (!this._running) return;
-      this._gt = setTimeout(() => { if (this._s.messages.greetingEnabled) this._onGreet(); this._sg(); },
-        this._s.timings.greetingInterval * 60000);
-    }
-    _sd() {
-      if (!this._running) return;
-      this._dt = setTimeout(() => { if (this._s.messages.drinkEnabled) this._onDrink(); this._sd(); },
-        this._s.timings.drinkInterval * 60000);
-    }
+    stop() { if(this._gt){clearInterval(this._gt);this._gt=null;} if(this._dt){clearInterval(this._dt);this._dt=null;} }
+    restart(s) { this.stop(); this.start(s); }
   }
 
-  // SETTINGS PANEL
   class SettingsPanel {
-    constructor(settings, onSave, onClose, onTestDrink) {
-      this._s = settings; this._onSave = onSave; this._onClose = onClose; this._onTestDrink = onTestDrink;
-      this._el = null; this._build();
-    }
-    _build() {
-      this._el = document.createElement('div');
-      this._el.id = 'pb-settings';
-      document.body.appendChild(this._el);
-    }
-    _html() {
-      const s = this._s;
-      const c = (v) => v ? 'checked' : '';
-      const esc = (arr) => (arr || []).join('\n').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-      return `<div class='pb-si'>
-        <div class='pb-sh'>
-          <span class='pb-st'>⚙️ Pixel Buddy Settings</span>
-          <button class='pb-sc' id='pb-close-btn'>✕</button>
-        </div>
-        <div class='pb-tabs'>
-          <button class='pb-tab active' data-tab='general'>General</button>
-          <button class='pb-tab' data-tab='timings'>Timings</button>
-          <button class='pb-tab' data-tab='messages'>Messages</button>
-          <button class='pb-tab' data-tab='animations'>Animations</button>
-          <button class='pb-tab' data-tab='behaviour'>Behaviour</button>
-          <button class='pb-tab' data-tab='shortcuts'>Shortcuts</button>
-        </div>
-        <div class='pb-tc'>
-          <div class='pb-panel active' id='tab-general'>
-            <label class='pb-row'><span>Enabled</span>
-              <input type='checkbox' id='s-enabled' ${c(s.general.enabled)}></label>
-            <label class='pb-row'><span>Name</span>
-              <input type='text' id='s-name' value="${s.general.name}"></label>
-            <label class='pb-row'><span>Show on all sites</span>
-              <input type='checkbox' id='s-allsites' ${c(s.general.showOnAllSites)}></label>
-          </div>
-          <div class='pb-panel' id='tab-timings'>
-            <label class='pb-row'><span>Greeting every (min)</span>
-              <input type='number' id='s-greet-int' value="${s.timings.greetingInterval}" min='1' max='120'></label>
-            <label class='pb-row'><span>Drink reminder every (min)</span>
-              <input type='number' id='s-drink-int' value="${s.timings.drinkInterval}" min='1' max='240'></label>
-            <label class='pb-row'><span>Animation duration (sec)</span>
-              <input type='number' id='s-anim-dur' value="${s.timings.animationDuration}" min='1' max='60' step='0.5'></label>
-            <label class='pb-row'><span>Bubble duration (sec)</span>
-              <input type='number' id='s-bubble-dur' value="${s.timings.bubbleDuration}" min='1' max='30'></label>
-          </div>
-          <div class='pb-panel' id='tab-messages'>
-            <label class='pb-row'><span>Greeting messages</span>
-              <input type='checkbox' id='s-greet-on' ${c(s.messages.greetingEnabled)}></label>
-            <label class='pb-row'><span>Drink reminders</span>
-              <input type='checkbox' id='s-drink-on' ${c(s.messages.drinkEnabled)}></label>
-            <label class='pb-row'><span>Sleep reminders</span>
-              <input type='checkbox' id='s-sleep-on' ${c(s.messages.sleepEnabled)}></label>
-            <div class='pb-msg-section'>
-              <div class='pb-msg-label'>Greeting messages <span class='pb-msg-hint'>(one per line)</span></div>
-              <textarea id='s-greet-pool' class='pb-textarea'>${esc(s.messages.greetingPool)}</textarea>
-            </div>
-            <div class='pb-msg-section'>
-              <div class='pb-msg-label'>Drink messages <span class='pb-msg-hint'>(one per line)</span></div>
-              <textarea id='s-drink-pool' class='pb-textarea'>${esc(s.messages.drinkPool)}</textarea>
-            </div>
-            <div class='pb-msg-section'>
-              <div class='pb-msg-label'>Sleep messages <span class='pb-msg-hint'>(one per line)</span></div>
-              <textarea id='s-sleep-pool' class='pb-textarea'>${esc(s.messages.sleepPool)}</textarea>
-            </div>
-          </div>
-          <div class='pb-panel' id='tab-animations'>
-            <label class='pb-row'><span>Greeting Wave</span>
-              <input type='checkbox' id='s-anim-wave' ${c(s.animations.wave)}></label>
-            <label class='pb-row'><span>Head Tilt</span>
-              <input type='checkbox' id='s-anim-headtilt' ${c(s.animations.headtilt)}></label>
-            <label class='pb-row'><span>Happy Bounce</span>
-              <input type='checkbox' id='s-anim-happybounce' ${c(s.animations.happybounce)}></label>
-            <label class='pb-row'><span>Drink Water</span>
-              <input type='checkbox' id='s-anim-drinkwater' ${c(s.animations.drinkwater)}></label>
-          </div>
-          <div class='pb-panel' id='tab-behaviour'>
-            <label class='pb-row'><span>Show on startup</span>
-              <input type='checkbox' id='s-startup' ${c(s.behaviour.showOnStartup)}></label>
-            <label class='pb-row'><span>Sound effects</span>
-              <input type='checkbox' id='s-sound' ${c(s.behaviour.soundEnabled)}></label>
-            <div class='pb-row'><span>Test drink reminder</span>
-              <button class='pb-btn-test' id='s-test-drink'>Trigger now</button></div>
-          </div>
-          <div class='pb-panel' id='tab-shortcuts'>
-            <p class='pb-hint'>Click the field below, then press your key combo to change the summon shortcut.</p>
-            <div class='pb-row'><span>Summon shortcut</span>
-              <input type='text' id='s-shortcut' value="${s.general.shortcut || 'Alt+V'}" readonly></div>
-            <p class='pb-hint'>Alt + any key recommended. Press Escape to cancel capture.</p>
-          </div>
-        </div>
-        <div class='pb-sf'>
-          <button class='pb-btn pb-btn-save' id='pb-save-btn'>Save</button>
-          <button class='pb-btn pb-btn-reset' id='pb-reset-btn'>Reset</button>
-        </div>
-      </div>`;
-    }
-    _wire() {
-      this._el.querySelectorAll('.pb-tab').forEach(btn => {
-        btn.addEventListener('click', () => {
-          this._el.querySelectorAll('.pb-tab').forEach(b => b.classList.remove('active'));
-          this._el.querySelectorAll('.pb-panel').forEach(p => p.classList.remove('active'));
-          btn.classList.add('active');
-          this._el.querySelector('#tab-' + btn.dataset.tab).classList.add('active');
-        });
-      });
-      this._el.querySelector('#pb-close-btn').addEventListener('click', () => this.close());
-      this._el.querySelector('#pb-save-btn').addEventListener('click', () => this._save());
-      this._el.querySelector('#pb-reset-btn').addEventListener('click', () => this._reset());
-      const sc = this._el.querySelector('#s-shortcut');
-      if (sc) {
-        sc.addEventListener('focus', () => { sc.value = 'Press keys...'; sc.style.color = '#8b6cf7'; });
-        sc.addEventListener('blur',  () => { sc.style.color = ''; sc.value = this._s.general.shortcut || 'Alt+V'; });
-        sc.addEventListener('keydown', (e) => {
-          e.preventDefault();
-          if (e.key === 'Escape') { sc.blur(); return; }
-          const p = [];
-          if (e.ctrlKey)  p.push('Ctrl');
-          if (e.altKey)   p.push('Alt');
-          if (e.shiftKey) p.push('Shift');
-          if (!['Control','Alt','Shift'].includes(e.key)) p.push(e.key);
-          if (p.length > 1 || (p.length === 1 && !['Ctrl','Alt','Shift'].includes(p[0]))) {
-            sc.value = p.join('+');
-            sc.style.color = '';
-            sc.blur();
-          }
-        });
-      }
-      const td = this._el.querySelector('#s-test-drink');
-      if (td) td.addEventListener('click', () => {
-        this.close();
-        setTimeout(() => { if (this._onTestDrink) this._onTestDrink(); }, 350);
-      });
-    }
-
-    _save() {
-      const s = this._s;
-      s.general.enabled           = document.getElementById('s-enabled').checked;
-      s.general.name              = document.getElementById('s-name').value.trim() || 'Pixel Buddy';
-      s.general.showOnAllSites    = document.getElementById('s-allsites').checked;
-      s.timings.greetingInterval  = +document.getElementById('s-greet-int').value  || 30;
-      s.timings.drinkInterval     = +document.getElementById('s-drink-int').value  || 60;
-      s.timings.animationDuration = +document.getElementById('s-anim-dur').value   || 9.5;
-      s.timings.bubbleDuration    = +document.getElementById('s-bubble-dur').value || 7;
-      s.messages.greetingEnabled  = document.getElementById('s-greet-on').checked;
-      s.messages.drinkEnabled     = document.getElementById('s-drink-on').checked;
-      s.messages.sleepEnabled     = document.getElementById('s-sleep-on').checked;
-      const parsePool = (id) =>
-        (document.getElementById(id).value || '').split('\n').map(l => l.trim()).filter(Boolean);
-      const gp = parsePool('s-greet-pool');
-      const dp = parsePool('s-drink-pool');
-      const sp = parsePool('s-sleep-pool');
-      s.messages.greetingPool = gp.length ? gp : DEFAULT_GREETING_POOL.slice();
-      s.messages.drinkPool    = dp.length ? dp : DEFAULT_DRINK_POOL.slice();
-      s.messages.sleepPool    = sp.length ? sp : DEFAULT_SLEEP_POOL.slice();
-      s.animations.wave           = document.getElementById('s-anim-wave').checked;
-      s.animations.headtilt       = document.getElementById('s-anim-headtilt').checked;
-      s.animations.happybounce    = document.getElementById('s-anim-happybounce').checked;
-      s.animations.drinkwater     = document.getElementById('s-anim-drinkwater').checked;
-      s.behaviour.showOnStartup   = document.getElementById('s-startup').checked;
-      s.behaviour.soundEnabled    = document.getElementById('s-sound').checked;
-      const scEl = document.getElementById('s-shortcut');
-      if (scEl && scEl.value && scEl.value !== 'Press keys...')
-        s.general.shortcut = scEl.value;
-      this._onSave(s);
-    }
-
-    _reset() {
-      if (!confirm('Reset all settings to defaults?')) return;
-      this._onSave(JSON.parse(JSON.stringify(DEFAULT_SETTINGS)));
+    constructor(settings, onSave) {
+      this._s=settings; this._onSave=onSave;
+      this._toastT=null; this._ro=null; this._escH=null;
+      this._muH=null; this._mmH=null; this._dragging=false; this._ox=0; this._oy=0;
     }
 
     open() {
-      this._el.innerHTML = this._html();
-      this._wire();
-      this._el.classList.add('pb-settings--open');
+      const existing=document.getElementById('pb-settings');
+      if (existing) {
+        const ov=document.getElementById('pb-overlay');
+        existing.style.display='flex';
+        if(ov) ov.style.display='block';
+        requestAnimationFrame(()=>{
+          existing.style.opacity='1'; existing.style.transform='scale(1)';
+          if(ov) ov.style.opacity='1';
+        });
+        return;
+      }
+      this._build();
     }
-    close() { this._el.classList.remove('pb-settings--open'); this._onClose(); }
+
+    close() {
+      const m=document.getElementById('pb-settings');
+      const o=document.getElementById('pb-overlay');
+      if(m){m.style.opacity='0';m.style.transform='scale(0.94)';}
+      if(o) o.style.opacity='0';
+      setTimeout(()=>{if(m)m.style.display='none';if(o)o.style.display='none';},220);
+      if(this._escH){document.removeEventListener('keydown',this._escH);this._escH=null;}
+      if(this._muH) document.removeEventListener('mouseup',this._muH);
+      if(this._mmH) document.removeEventListener('mousemove',this._mmH);
+    }
+
+    _build() {
+      const ov=document.createElement('div');
+      ov.id='pb-overlay';
+      ov.addEventListener('click',()=>this.close());
+      document.body.appendChild(ov);
+
+      const modal=document.createElement('div');
+      modal.id='pb-settings';
+      try {
+        const pos=JSON.parse(GM_getValue('pb_panel_pos_v1','{}'));
+        if(pos.left)   modal.style.left=pos.left;
+        if(pos.top)    modal.style.top=pos.top;
+        if(pos.width)  modal.style.width=pos.width;
+        if(pos.height) modal.style.height=pos.height;
+      } catch(e){}
+      if(!modal.style.left){
+        modal.style.left=Math.max(0,(window.innerWidth-620)/2)+'px';
+        modal.style.top=Math.max(0,(window.innerHeight-540)/2)+'px';
+      }
+      modal.style.opacity='0'; modal.style.transform='scale(0.94)'; modal.style.display='flex';
+      modal.innerHTML=this._buildHTML();
+      document.body.appendChild(modal);
+      requestAnimationFrame(()=>{
+        modal.style.opacity='1'; modal.style.transform='scale(1)';
+        ov.style.display='block';
+        requestAnimationFrame(()=>{ ov.style.opacity='1'; });
+      });
+      this._wireDrag(modal);
+      this._wireResize(modal);
+      this._wireEvents(modal);
+      this._wireSearch(modal);
+      this._switchTab(modal,'general');
+      this._escH=e=>{ if(e.key==='Escape') this.close(); };
+      document.addEventListener('keydown',this._escH);
+    }
+
+    _buildHTML() {
+      return this._hdr()+this._tabs()+
+        '<div class="pb-body">'+
+          this._bGeneral()+this._bAnimations()+this._bMessages()+
+          this._bReminders()+this._bAppearance()+this._bShortcuts()+
+          this._bAdvanced()+this._bAbout()+
+        '</div><div id="pb-toast">\u2713 Saved</div>';
+    }
+
+    _hdr() {
+      return '<div class="pb-header">'+
+        '<span class="pb-title">\u2699\ufe0f Pixel Buddy Settings</span>'+
+        '<input type="text" id="pb-search" placeholder="Search\u2026" autocomplete="off">'+
+        '<button class="pb-close-btn" id="pb-close-btn">\u2715</button></div>';
+    }
+    _tabs() {
+      const t=['general','animations','messages','reminders','appearance','shortcuts','advanced','about'];
+      const l=['General','Animations','Messages','Reminders','Appearance','Shortcuts','Advanced','About'];
+      return '<div class="pb-tab-bar">'+t.map((v,i)=>'<button class="pb-tab" data-tab="'+v+'">'+l[i]+'</button>').join('')+'</div>';
+    }
+    _row(lbl,desc,ctrl,tip) {
+      const t=tip?' title="'+tip+'"':'';
+      return '<div class="pb-row" data-label="'+lbl.toLowerCase()+'">'+
+        '<div class="pb-row-info"><span class="pb-row-label"'+t+'>'+lbl+'</span>'+
+        (desc?'<span class="pb-row-desc">'+desc+'</span>':'')+
+        '</div><div class="pb-row-ctrl">'+ctrl+'</div></div>';
+    }
+    _tog(id,val) {
+      return '<label class="pb-switch"><input type="checkbox" id="'+id+'"'+(val?' checked':'')+
+        '><span class="pb-knob"></span></label>';
+    }
+    _num(id,val,mn,mx,st) {
+      return '<input type="number" class="pb-num-input" id="'+id+'" value="'+val+
+        '" min="'+mn+'" max="'+mx+'" step="'+(st||1)+'">';
+    }
+    _rng(id,val,mn,mx,st,sfx) {
+      return '<div class="pb-range-wrap">'+
+        '<input type="range" class="pb-range" id="'+id+'" value="'+val+
+        '" min="'+mn+'" max="'+mx+'" step="'+(st||1)+'">'+
+        '<span class="pb-range-val" data-for="'+id+'">'+val+(sfx||'')+'</span></div>';
+    }
+
+    _bGeneral() {
+      const s=this._s;
+      return '<div class="pb-panel" data-panel="general">'+
+        '<div class="pb-section-title">General</div>'+
+        this._row('Enable Pixel Buddy','Show or hide the companion',this._tog('pb-s-enabled',s.general.enabled))+
+        this._row('Show on Startup','Play greeting animation on page load',this._tog('pb-s-startup',s.behaviour.showOnStartup),'Off by default')+
+        this._row('Speech Bubbles','Show message bubbles above the pet',this._tog('pb-s-bubble',s.general.bubbleEnabled))+
+        this._row('Show on All Sites','Appear on every website',this._tog('pb-s-allsites',s.general.showOnAllSites))+
+        this._row('Pet Name','Name used in the UI','<input type="text" class="pb-text-input" id="pb-s-name" value="'+(s.general.name||'Pixel Buddy')+'">')+
+        '</div>';
+    }
+
+    _bAnimations() {
+      const s=this._s;
+      return '<div class="pb-panel" data-panel="animations">'+
+        '<div class="pb-section-title">Animation Pool</div>'+
+        this._row('Wave','Friendly wave',this._tog('pb-s-anim-wave',s.animations.wave))+
+        this._row('Head Tilt','Curious head tilt',this._tog('pb-s-anim-headtilt',s.animations.headtilt))+
+        this._row('Happy Bounce','Joyful bounce',this._tog('pb-s-anim-happybounce',s.animations.happybounce))+
+        this._row('Drink Water','Hydration animation',this._tog('pb-s-anim-drinkwater',s.animations.drinkwater))+
+        '<div class="pb-section-title">Preview</div>'+
+        '<div class="pb-btn-row">'+
+        '<button class="pb-action-btn" id="pb-s-preview-greet">\u25b6 Greeting</button>'+
+        '<button class="pb-action-btn" id="pb-s-preview-drink">\u25b6 Drink</button>'+
+        '</div></div>';
+    }
+
+    _bMessages() {
+      const s=this._s;
+      const e=t=>t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      const gp=e((s.messages.greetingPool||DEFAULT_GREETING_POOL).join('\n'));
+      const dp=e((s.messages.drinkPool   ||DEFAULT_DRINK_POOL   ).join('\n'));
+      const sp=e((s.messages.sleepPool   ||DEFAULT_SLEEP_POOL   ).join('\n'));
+      return '<div class="pb-panel" data-panel="messages">'+
+        '<div class="pb-section-title">Greeting Messages</div>'+
+        this._row('Enable Greetings','Show greeting speech bubbles',this._tog('pb-s-greetEnabled',s.messages.greetingEnabled))+
+        '<div class="pb-ta-wrap"><span class="pb-row-desc">One message per line</span>'+
+        '<textarea class="pb-textarea" id="pb-s-greetPool" rows="5">'+gp+'</textarea>'+
+        '<div class="pb-btn-row"><button class="pb-action-btn secondary" id="pb-s-restoreGreet">\u21ba Restore Defaults</button></div></div>'+
+        '<div class="pb-section-title">Drink Messages</div>'+
+        this._row('Enable Drink Reminders','Show water reminder bubbles',this._tog('pb-s-drinkEnabled',s.messages.drinkEnabled))+
+        '<div class="pb-ta-wrap"><span class="pb-row-desc">One message per line</span>'+
+        '<textarea class="pb-textarea" id="pb-s-drinkPool" rows="5">'+dp+'</textarea>'+
+        '<div class="pb-btn-row"><button class="pb-action-btn secondary" id="pb-s-restoreDrink">\u21ba Restore Defaults</button></div></div>'+
+        '<div class="pb-section-title">Sleep Messages</div>'+
+        this._row('Enable Sleep Reminders','Show sleep reminder bubbles',this._tog('pb-s-sleepEnabled',s.messages.sleepEnabled))+
+        '<div class="pb-ta-wrap"><span class="pb-row-desc">One message per line</span>'+
+        '<textarea class="pb-textarea" id="pb-s-sleepPool" rows="5">'+sp+'</textarea>'+
+        '<div class="pb-btn-row"><button class="pb-action-btn secondary" id="pb-s-restoreSleep">\u21ba Restore Defaults</button></div></div>'+
+        '</div>';
+    }
+
+    _bReminders() {
+      const s=this._s;
+      return '<div class="pb-panel" data-panel="reminders">'+
+        '<div class="pb-section-title">Intervals</div>'+
+        this._row('Greeting Interval','Minutes between greeting animations',this._num('pb-s-greetInterval',s.timings.greetingInterval,1,999,1),'Minutes')+
+        this._row('Drink Interval','Minutes between drink reminders',this._num('pb-s-drinkInterval',s.timings.drinkInterval,1,999,1),'Minutes')+
+        '<div class="pb-section-title">Durations</div>'+
+        this._row('Animation Duration','Seconds to show each animation',this._num('pb-s-animDuration',s.timings.animationDuration,1,60,0.5),'Seconds')+
+        this._row('Bubble Duration','Seconds to show speech bubble',this._num('pb-s-bubbleDuration',s.timings.bubbleDuration,1,60,0.5),'Seconds')+
+        '<div class="pb-section-title">Test</div>'+
+        '<div class="pb-btn-row"><button class="pb-action-btn" id="pb-s-testDrink">\ud83d\udca7 Test Drink Reminder</button></div>'+
+        '</div>';
+    }
+
+    _bAppearance() {
+      const s=this._s;
+      const sz=s.appearance.petSize||160;
+      const op=s.appearance.petOpacity||1;
+      const pos=s.appearance.position||'bottom-right';
+      const opts=['bottom-right','bottom-left','top-right','top-left'];
+      return '<div class="pb-panel" data-panel="appearance">'+
+        '<div class="pb-section-title">Pet Size &amp; Opacity</div>'+
+        this._row('Pet Size','Height in pixels (80\u2013240)',this._rng('pb-s-petSize',sz,80,240,4,'px'))+
+        this._row('Pet Opacity','Transparency (0.3\u20131.0)',this._rng('pb-s-petOpacity',op,0.3,1,0.05,''))+
+        '<div class="pb-section-title">Position</div>'+
+        this._row('Screen Corner','Where the pet appears',
+          '<select class="pb-select" id="pb-s-position">'+
+          opts.map(v=>'<option value="'+v+'"'+(v===pos?' selected':'')+'>'+v+'</option>').join('')+
+          '</select>')+
+        '</div>';
+    }
+
+    _bShortcuts() {
+      const s=this._s;
+      return '<div class="pb-panel" data-panel="shortcuts">'+
+        '<div class="pb-section-title">Keyboard Shortcut</div>'+
+        this._row('Toggle Pet','Show/hide with a key combo',
+          '<input type="text" class="pb-shortcut-input" id="pb-s-shortcut" value="'+(s.general.shortcut||'Alt+V')+
+          '" readonly placeholder="Click then press keys\u2026">','Click field then press a combo')+
+        '<p style="font-size:12px;color:rgba(255,255,255,0.4);margin:10px 0;line-height:1.6">'+
+        'Click the shortcut field, then press any key combination such as Alt+P. '+
+        'The shortcut instantly toggles pet visibility.</p></div>';
+    }
+
+    _bAdvanced() {
+      return '<div class="pb-panel" data-panel="advanced">'+
+        '<div class="pb-section-title">Data</div>'+
+        '<div class="pb-btn-row">'+
+        '<button class="pb-action-btn secondary" id="pb-s-exportSettings">\u2b07 Export Settings</button>'+
+        '<button class="pb-action-btn secondary" id="pb-s-importSettings">\u2b06 Import Settings</button>'+
+        '</div><div class="pb-section-title">History</div>'+
+        '<div class="pb-btn-row">'+
+        '<button class="pb-action-btn secondary" id="pb-s-resetMsgHistory">\u21ba Reset Message History</button>'+
+        '<button class="pb-action-btn secondary" id="pb-s-resetAnimHistory">\u21ba Reset Anim History</button>'+
+        '</div><div class="pb-section-title">Reset</div>'+
+        '<div class="pb-btn-row">'+
+        '<button class="pb-action-btn danger" id="pb-s-factoryReset">\u26a0\ufe0f Factory Reset</button>'+
+        '</div><p style="font-size:11px;color:rgba(255,255,255,0.32);margin-top:8px;line-height:1.6">'+
+        'Factory reset removes all saved settings and reloads the page.</p></div>';
+    }
+
+    _bAbout() {
+      return '<div class="pb-panel" data-panel="about">'+
+        '<div class="pb-about-logo">\ud83d\udc3e</div>'+
+        '<div class="pb-about-title">Pixel Buddy</div>'+
+        '<div class="pb-about-ver">v3.13.0</div>'+
+        '<div class="pb-about-desc">Your friendly desktop companion.<br>'+
+        'Plays animations, shows motivational messages,<br>'+
+        'and reminds you to stay hydrated.<br><br>'+
+        'All settings auto-save instantly.<br>'+
+        'No server. No tracking. Just vibes.</div></div>';
+    }
+
+    _wireDrag(modal) {
+      const hdr=modal.querySelector('.pb-header');
+      this._mmH=e=>{
+        if(!this._dragging) return;
+        const nx=Math.max(0,Math.min(window.innerWidth-modal.offsetWidth,e.clientX-this._ox));
+        const ny=Math.max(0,Math.min(window.innerHeight-modal.offsetHeight,e.clientY-this._oy));
+        modal.style.left=nx+'px'; modal.style.top=ny+'px';
+      };
+      this._muH=()=>{ if(this._dragging){this._dragging=false;this._savePos(modal);} };
+      hdr.addEventListener('mousedown',e=>{
+        if(e.target.id==='pb-close-btn'||e.target.id==='pb-search') return;
+        this._dragging=true;
+        this._ox=e.clientX-modal.offsetLeft;
+        this._oy=e.clientY-modal.offsetTop;
+        e.preventDefault();
+      });
+      document.addEventListener('mousemove',this._mmH);
+      document.addEventListener('mouseup',this._muH);
+    }
+
+    _wireResize(modal) {
+      if(!window.ResizeObserver) return;
+      let t=null;
+      this._ro=new ResizeObserver(()=>{
+        if(t) clearTimeout(t);
+        t=setTimeout(()=>this._savePos(modal),400);
+      });
+      this._ro.observe(modal);
+    }
+
+    _savePos(modal) {
+      GM_setValue('pb_panel_pos_v1',JSON.stringify({
+        left:modal.style.left, top:modal.style.top,
+        width:modal.offsetWidth+'px', height:modal.offsetHeight+'px'
+      }));
+    }
+
+    _wireEvents(modal) {
+      const g=id=>document.getElementById(id);
+
+      g('pb-close-btn').addEventListener('click',()=>this.close());
+
+      modal.querySelectorAll('.pb-tab').forEach(btn=>{
+        btn.addEventListener('click',()=>this._switchTab(modal,btn.dataset.tab));
+      });
+
+      // Checkboxes + selects: immediate save
+      modal.querySelectorAll('input[type=checkbox],select').forEach(el=>{
+        el.addEventListener('change',()=>this._autoSave());
+      });
+
+      // Ranges: update display value + save
+      modal.querySelectorAll('input[type=range]').forEach(el=>{
+        el.addEventListener('input',()=>{
+          const d=modal.querySelector('[data-for="'+el.id+'"]');
+          if(d){ const sfx=el.id==='pb-s-petSize'?'px':''; d.textContent=el.value+sfx; }
+          this._autoSave();
+        });
+      });
+
+      // Number + text inputs: debounced
+      let debT=null;
+      const dSave=()=>{ if(debT) clearTimeout(debT); debT=setTimeout(()=>this._autoSave(),400); };
+      modal.querySelectorAll('input[type=number],input[type=text]').forEach(el=>{
+        if(el.id==='pb-search'||el.id==='pb-s-shortcut') return;
+        el.addEventListener('input',dSave);
+      });
+      modal.querySelectorAll('textarea').forEach(el=>el.addEventListener('input',dSave));
+
+      // Shortcut capture
+      const sc=g('pb-s-shortcut');
+      if(sc){
+        sc.addEventListener('keydown',e=>{
+          e.preventDefault(); e.stopPropagation();
+          const p=[];
+          if(e.ctrlKey)  p.push('Ctrl');
+          if(e.altKey)   p.push('Alt');
+          if(e.shiftKey) p.push('Shift');
+          if(e.metaKey)  p.push('Meta');
+          const k=e.key;
+          if(!['Control','Alt','Shift','Meta'].includes(k))
+            p.push(k.length===1?k.toUpperCase():k);
+          if(p.length>1){ sc.value=p.join('+'); this._autoSave(); }
+        });
+      }
+
+      // Preview buttons
+      g('pb-s-preview-greet')?.addEventListener('click',()=>this._onSave(this._s,'preview-greeting'));
+      g('pb-s-preview-drink')?.addEventListener('click',()=>this._onSave(this._s,'preview-drink'));
+
+      // Restore defaults
+      g('pb-s-restoreGreet')?.addEventListener('click',()=>{
+        const ta=g('pb-s-greetPool'); if(ta){ta.value=DEFAULT_GREETING_POOL.join('\n');this._autoSave();}
+      });
+      g('pb-s-restoreDrink')?.addEventListener('click',()=>{
+        const ta=g('pb-s-drinkPool'); if(ta){ta.value=DEFAULT_DRINK_POOL.join('\n');this._autoSave();}
+      });
+      g('pb-s-restoreSleep')?.addEventListener('click',()=>{
+        const ta=g('pb-s-sleepPool'); if(ta){ta.value=DEFAULT_SLEEP_POOL.join('\n');this._autoSave();}
+      });
+
+      // Test drink
+      g('pb-s-testDrink')?.addEventListener('click',()=>this._onSave(this._s,'test-drink'));
+
+      // Advanced
+      g('pb-s-exportSettings')?.addEventListener('click',()=>{
+        const blob=new Blob([JSON.stringify(this._s,null,2)],{type:'application/json'});
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement('a'); a.href=url; a.download='pixel-buddy-settings.json'; a.click();
+        URL.revokeObjectURL(url);
+      });
+      g('pb-s-importSettings')?.addEventListener('click',()=>{
+        const inp=document.createElement('input'); inp.type='file'; inp.accept='.json';
+        inp.onchange=e=>{
+          const file=e.target.files[0]; if(!file) return;
+          const reader=new FileReader();
+          reader.onload=ev=>{
+            try {
+              const data=JSON.parse(ev.target.result);
+              this._s=Object.assign(JSON.parse(JSON.stringify(DEFAULT_SETTINGS)),data);
+              StorageManager.save(this._s);
+              this._onSave(this._s,'reload');
+            } catch(e){ alert('Invalid settings file'); }
+          };
+          reader.readAsText(file);
+        };
+        inp.click();
+      });
+      g('pb-s-resetMsgHistory')?.addEventListener('click',()=>{
+        this._onSave(this._s,'reset-msg-history');
+        this._showToast('\u21ba Message history reset');
+      });
+      g('pb-s-resetAnimHistory')?.addEventListener('click',()=>{
+        this._onSave(this._s,'reset-anim-history');
+        this._showToast('\u21ba Anim history reset');
+      });
+      g('pb-s-factoryReset')?.addEventListener('click',()=>{
+        if(!confirm('Factory reset Pixel Buddy? All settings will be lost.')) return;
+        this._s=JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+        StorageManager.save(this._s);
+        this._onSave(this._s,'reload');
+      });
+    }
+
+    _wireSearch(modal) {
+      const inp=modal.querySelector('#pb-search');
+      if(!inp) return;
+      inp.addEventListener('input',()=>{
+        const q=inp.value.toLowerCase().trim();
+        const panel=modal.querySelector('.pb-panel.active');
+        if(!panel) return;
+        panel.querySelectorAll('.pb-row').forEach(row=>{
+          row.style.display=(!q||(row.dataset.label||'').includes(q))?'':'none';
+        });
+      });
+    }
+
+    _switchTab(modal, tab) {
+      modal.querySelectorAll('.pb-tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===tab));
+      modal.querySelectorAll('.pb-panel').forEach(p=>p.classList.toggle('active',p.dataset.panel===tab));
+      const s=modal.querySelector('#pb-search');
+      if(s){s.value='';modal.querySelectorAll('.pb-row').forEach(r=>r.style.display='');}
+    }
+
+    _autoSave() {
+      const g=id=>document.getElementById(id);
+      const chk=(id,def)=>{ const el=g(id); return el?el.checked:def; };
+      const val=(id,def)=>{ const el=g(id); return el?el.value:def; };
+      const num=(id,def)=>{ const el=g(id); return el?(parseFloat(el.value)||def):def; };
+
+      const s=JSON.parse(JSON.stringify(this._s));
+      s.general.enabled         = chk('pb-s-enabled',   s.general.enabled);
+      s.general.name            = val('pb-s-name',       s.general.name);
+      s.general.showOnAllSites  = chk('pb-s-allsites',   s.general.showOnAllSites);
+      s.general.bubbleEnabled   = chk('pb-s-bubble',     s.general.bubbleEnabled);
+      s.behaviour.showOnStartup = chk('pb-s-startup',    s.behaviour.showOnStartup);
+
+      ['wave','headtilt','happybounce','drinkwater'].forEach(k=>{
+        const el=g('pb-s-anim-'+k); if(el) s.animations[k]=el.checked;
+      });
+
+      s.messages.greetingEnabled = chk('pb-s-greetEnabled', s.messages.greetingEnabled);
+      s.messages.drinkEnabled    = chk('pb-s-drinkEnabled',  s.messages.drinkEnabled);
+      s.messages.sleepEnabled    = chk('pb-s-sleepEnabled',  s.messages.sleepEnabled);
+
+      const pp=id=>{
+        const el=g(id); if(!el) return null;
+        const lines=el.value.split('\n').map(l=>l.trim()).filter(Boolean);
+        return lines.length?lines:null;
+      };
+      s.messages.greetingPool = pp('pb-s-greetPool') || s.messages.greetingPool;
+      s.messages.drinkPool    = pp('pb-s-drinkPool') || s.messages.drinkPool;
+      s.messages.sleepPool    = pp('pb-s-sleepPool') || s.messages.sleepPool;
+
+      s.timings.greetingInterval  = num('pb-s-greetInterval',  30);
+      s.timings.drinkInterval     = num('pb-s-drinkInterval',  60);
+      s.timings.animationDuration = num('pb-s-animDuration',   9.5);
+      s.timings.bubbleDuration    = num('pb-s-bubbleDuration', 7);
+
+      s.appearance.petSize    = num('pb-s-petSize',    160);
+      s.appearance.petOpacity = num('pb-s-petOpacity', 1);
+      const posEl=g('pb-s-position'); if(posEl) s.appearance.position=posEl.value;
+
+      const scEl=g('pb-s-shortcut'); if(scEl&&scEl.value) s.general.shortcut=scEl.value;
+
+      this._s=s;
+      this._onSave(s);
+      this._showToast();
+    }
+
+    _showToast(msg) {
+      const t=document.getElementById('pb-toast'); if(!t) return;
+      t.textContent=msg||'\u2713 Saved';
+      t.classList.add('pb-toast--show');
+      if(this._toastT) clearTimeout(this._toastT);
+      this._toastT=setTimeout(()=>t.classList.remove('pb-toast--show'),2000);
+    }
   }
 
-  // PIXEL BUDDY
+  const PB_CSS = `
+    #pb-pet {
+      position:fixed; bottom:10px; right:10px; z-index:2147483640;
+      display:flex; flex-direction:column; align-items:center;
+      pointer-events:auto; will-change:transform; cursor:default;
+    }
+    #pb-gif {
+      pointer-events:auto; height:160px; width:auto;
+      image-rendering:-webkit-optimize-contrast; image-rendering:crisp-edges;
+      transition:opacity .4s ease; display:none; opacity:0;
+    }
+    #pb-bubble {
+      pointer-events:auto; background:rgba(14,14,26,0.95);
+      border:1px solid rgba(130,100,255,0.4); border-radius:12px;
+      padding:8px 12px; max-width:220px;
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+      font-size:13px; color:#e0e0f8; text-align:center; margin-bottom:8px;
+      line-height:1.5; box-shadow:0 4px 16px rgba(0,0,0,0.4);
+      transition:opacity .4s ease; display:none; opacity:0;
+    }
+    .pb-bubble-actions {
+      display:flex; gap:6px; margin-top:8px; justify-content:center;
+    }
+    .pb-bubble-btn {
+      background:rgba(130,100,255,0.25); border:1px solid rgba(130,100,255,0.5);
+      border-radius:6px; padding:3px 12px; color:#e0e0f8; font-size:11px;
+      cursor:pointer; transition:all .15s; font-family:inherit; white-space:nowrap;
+    }
+    .pb-bubble-btn:hover { background:rgba(130,100,255,0.5); color:#fff; }
+    #pb-overlay {
+      position:fixed; inset:0; background:rgba(0,0,0,0.55);
+      backdrop-filter:blur(4px); z-index:2147483645;
+      display:none; opacity:0; transition:opacity .22s;
+    }
+    #pb-settings {
+      position:fixed; width:620px; min-width:380px; max-width:95vw;
+      height:540px; min-height:320px; max-height:90vh;
+      background:rgba(14,14,22,0.97); backdrop-filter:blur(24px) saturate(180%);
+      border:1px solid rgba(255,255,255,0.1); border-radius:16px;
+      box-shadow:0 32px 100px rgba(0,0,0,0.8),0 0 0 1px rgba(255,255,255,0.05);
+      z-index:2147483646; display:none; flex-direction:column;
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+      font-size:13px; color:#d0d0e8; transition:opacity .22s,transform .22s;
+      overflow:hidden; resize:both; box-sizing:border-box;
+    }
+    .pb-header {
+      display:flex; align-items:center; gap:10px;
+      padding:12px 14px; border-bottom:1px solid rgba(255,255,255,0.07);
+      cursor:move; user-select:none; flex-shrink:0; background:rgba(255,255,255,0.02);
+    }
+    .pb-title { font-size:14px; font-weight:600; color:#e8e8ff; white-space:nowrap; }
+    #pb-search {
+      flex:1; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.1);
+      border-radius:8px; padding:5px 10px; color:#e0e0f0; font-size:12px;
+      outline:none; cursor:text; min-width:0;
+    }
+    #pb-search::placeholder { color:rgba(255,255,255,0.3); }
+    #pb-search:focus { border-color:rgba(130,100,255,0.5); background:rgba(255,255,255,0.1); }
+    .pb-close-btn {
+      background:none; border:none; color:rgba(255,255,255,0.45);
+      font-size:16px; cursor:pointer; padding:4px 8px; border-radius:6px; line-height:1;
+      flex-shrink:0; transition:all .15s;
+    }
+    .pb-close-btn:hover { background:rgba(255,60,60,0.2); color:#ff6060; }
+    .pb-tab-bar {
+      display:flex; gap:2px; padding:8px 12px 0;
+      border-bottom:1px solid rgba(255,255,255,0.06); flex-shrink:0;
+      overflow-x:auto; scrollbar-width:none;
+    }
+    .pb-tab-bar::-webkit-scrollbar { display:none; }
+    .pb-tab {
+      background:none; border:none; color:rgba(255,255,255,0.42);
+      padding:6px 12px; border-radius:8px 8px 0 0; cursor:pointer;
+      font-size:12px; white-space:nowrap; transition:all .15s; font-family:inherit;
+    }
+    .pb-tab:hover { background:rgba(255,255,255,0.07); color:rgba(255,255,255,0.8); }
+    .pb-tab.active { background:rgba(130,100,255,0.18); color:#a584ff; font-weight:600; }
+    .pb-body { flex:1; overflow:hidden; position:relative; }
+    .pb-panel {
+      display:none; height:100%; overflow-y:auto; padding:14px 16px 16px;
+      box-sizing:border-box; scrollbar-width:thin;
+      scrollbar-color:rgba(255,255,255,0.14) transparent;
+    }
+    .pb-panel.active { display:block; }
+    .pb-panel::-webkit-scrollbar { width:5px; }
+    .pb-panel::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.14); border-radius:3px; }
+    .pb-section-title {
+      font-size:10px; font-weight:700; letter-spacing:.1em; color:rgba(255,255,255,0.32);
+      text-transform:uppercase; margin:16px 0 8px; padding-bottom:5px;
+      border-bottom:1px solid rgba(255,255,255,0.06);
+    }
+    .pb-panel>.pb-section-title:first-child { margin-top:0; }
+    .pb-row {
+      display:flex; align-items:center; justify-content:space-between;
+      gap:12px; padding:9px 0; border-bottom:1px solid rgba(255,255,255,0.04);
+    }
+    .pb-row:last-child { border-bottom:none; }
+    .pb-row-info { flex:1; min-width:0; }
+    .pb-row-label { display:block; font-size:13px; color:#d8d8f0; }
+    .pb-row-desc  { display:block; font-size:11px; color:rgba(255,255,255,0.36); margin-top:2px; }
+    .pb-row-ctrl  { flex-shrink:0; }
+    .pb-switch { display:inline-flex; cursor:pointer; position:relative; }
+    .pb-switch input { opacity:0; width:0; height:0; position:absolute; }
+    .pb-knob {
+      display:inline-block; width:40px; height:22px;
+      background:rgba(255,255,255,0.14); border-radius:11px;
+      position:relative; transition:background .2s;
+    }
+    .pb-knob::after {
+      content:''; position:absolute; top:3px; left:3px;
+      width:16px; height:16px; border-radius:50%;
+      background:#fff; transition:transform .2s; box-shadow:0 1px 4px rgba(0,0,0,0.3);
+    }
+    .pb-switch input:checked + .pb-knob { background:#7864ff; }
+    .pb-switch input:checked + .pb-knob::after { transform:translateX(18px); }
+    .pb-text-input,.pb-num-input {
+      background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.1);
+      border-radius:8px; padding:6px 10px; color:#e0e0f0; font-size:12px;
+      outline:none; box-sizing:border-box; font-family:inherit;
+    }
+    .pb-text-input { width:160px; }
+    .pb-num-input  { width:82px; }
+    .pb-text-input:focus,.pb-num-input:focus { border-color:rgba(130,100,255,0.5); }
+    .pb-range-wrap { display:flex; align-items:center; gap:8px; }
+    input[type=range].pb-range {
+      -webkit-appearance:none; appearance:none; width:130px; height:4px;
+      border-radius:2px; background:rgba(255,255,255,0.14); outline:none; cursor:pointer;
+    }
+    input[type=range].pb-range::-webkit-slider-thumb {
+      -webkit-appearance:none; width:16px; height:16px; border-radius:50%;
+      background:#7864ff; cursor:pointer; box-shadow:0 1px 6px rgba(120,100,255,0.6);
+    }
+    .pb-range-val { font-size:12px; color:#a584ff; min-width:42px; text-align:right; }
+    .pb-textarea {
+      width:100%; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1);
+      border-radius:8px; padding:8px 10px; color:#e0e0f0; font-size:12px;
+      font-family:inherit; resize:vertical; outline:none; box-sizing:border-box; margin-top:6px;
+    }
+    .pb-textarea:focus { border-color:rgba(130,100,255,0.5); }
+    .pb-ta-wrap { margin-bottom:4px; }
+    .pb-action-btn {
+      background:rgba(130,100,255,0.18); border:1px solid rgba(130,100,255,0.3);
+      border-radius:8px; padding:6px 14px; color:#a584ff; font-size:12px;
+      cursor:pointer; transition:all .15s; white-space:nowrap; font-family:inherit;
+    }
+    .pb-action-btn:hover { background:rgba(130,100,255,0.34); color:#c0a8ff; }
+    .pb-action-btn.danger {
+      background:rgba(255,70,70,0.14); border-color:rgba(255,70,70,0.3); color:#ff8080;
+    }
+    .pb-action-btn.danger:hover { background:rgba(255,70,70,0.3); }
+    .pb-action-btn.secondary {
+      background:rgba(255,255,255,0.06); border-color:rgba(255,255,255,0.14); color:rgba(255,255,255,0.55);
+    }
+    .pb-action-btn.secondary:hover { background:rgba(255,255,255,0.12); color:rgba(255,255,255,0.8); }
+    .pb-btn-row { display:flex; gap:8px; flex-wrap:wrap; padding:8px 0 4px; }
+    .pb-select {
+      background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.1);
+      border-radius:8px; padding:6px 10px; color:#e0e0f0; font-size:12px;
+      outline:none; font-family:inherit; cursor:pointer;
+    }
+    .pb-select option { background:#1a1a2e; }
+    .pb-shortcut-input {
+      background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.1);
+      border-radius:8px; padding:6px 14px; color:#e0e0f0; font-size:12px;
+      cursor:pointer; outline:none; min-width:130px; text-align:center;
+      font-family:inherit; font-weight:600;
+    }
+    .pb-shortcut-input:focus { border-color:rgba(130,100,255,0.5); background:rgba(130,100,255,0.12); }
+    #pb-toast {
+      position:absolute; bottom:14px; right:16px;
+      background:rgba(70,200,90,0.18); border:1px solid rgba(70,200,90,0.32);
+      border-radius:8px; padding:6px 14px; color:#80e890; font-size:12px;
+      opacity:0; transition:opacity .25s; pointer-events:none; z-index:1;
+    }
+    #pb-toast.pb-toast--show { opacity:1; }
+    .pb-about-logo  { font-size:52px; text-align:center; margin:20px 0 10px; }
+    .pb-about-title { text-align:center; font-size:20px; font-weight:700; color:#e8e8ff; margin-bottom:4px; }
+    .pb-about-ver   { text-align:center; font-size:12px; color:rgba(255,255,255,0.38); margin-bottom:28px; }
+    .pb-about-desc  { text-align:center; font-size:13px; color:rgba(255,255,255,0.55); line-height:1.7; }
+  `;
+
   class PixelBuddy {
     constructor() {
-      this._s         = StorageManager.load();
-      this._msgs      = new MessageManager(this._s);
-      this._anim      = null;
-      this._bubble    = null;
-      this._reminders = null;
-      this._panel     = null;
-      this._busy      = false;
-      this._panelOpen = false;
+      this._s     = StorageManager.load();
+      this._water = new WaterTracker();
+      this._msg   = new MessageManager(this._s);
+      this._anim  = null; this._bubble = null; this._remind = null;
+      this._panel = null; this._scH = null;
     }
 
     init() {
-      console.log('[PixelBuddy] v3.12.1 starting, enabled:', this._s.general.enabled);
-      if (!this._s.general.enabled) return;
       this._buildDOM();
-      this._injectStyles();
-      this._bubble    = new SpeechBubbleManager(document.getElementById('pb-bubble'));
-      this._reminders = new ReminderManager(this._s,
-        () => this._doGreeting(), () => this._doDrink(true));
-      document.addEventListener('keydown', (e) => this._onKey(e), true);
-      document.getElementById('pb-gif-wrap').addEventListener('contextmenu', (e) => {
-        e.preventDefault(); e.stopPropagation();
-        this._openSettings();
-      });
-      this._anim = new AnimationManager(this._s, () => {
-        console.log('[PixelBuddy] all animations ready');
-        if (this._s.behaviour.showOnStartup) this._doGreeting();
-        this._reminders.start();
-      });
-    }
+      const imgEl    = document.getElementById('pb-gif');
+      const bubbleEl = document.getElementById('pb-bubble');
+      this._anim   = new AnimationManager(this._s, imgEl);
+      this._bubble = new SpeechBubbleManager(bubbleEl);
+      this._panel  = new SettingsPanel(this._s, (s,a)=>this._onSave(s,a));
+      this._applyAppearance(this._s);
+      this._registerShortcut();
 
-    _doGreeting() {
-      console.log('[PixelBuddy] _doGreeting called, busy=' + this._busy);
-      if (this._busy) return;
-      if (!this._anim) { console.warn('[PixelBuddy] _anim not ready yet'); return; }
-      let keys = this._anim.getByCategory('greeting');
-      let msg  = this._msgs.getGreetingMessage();
-      if (!keys.length) {
-        const allKeys = Object.keys(AnimationManager.REGISTRY)
-          .filter(k => this._s.animations[k] && this._anim._urls[k]);
-        if (!allKeys.length) return;
-        keys = allKeys;
-        if (this._anim.getByCategory('drink').some(k => keys.includes(k)))
-          msg = this._msgs.getDrinkMessage();
+      // Pet is always hidden on load — Alt+V summons it
+      document.getElementById('pb-pet').style.display = 'none';
+
+      if (!this._s.general.enabled) return;
+
+      this._remind = new ReminderManager(()=>this._doGreeting(), ()=>this._doDrink());
+      this._remind.start(this._s);
+
+      // showOnStartup: show pet immediately if user opted in
+      if (this._s.behaviour.showOnStartup) {
+        setTimeout(()=>this._doGreeting(), 500);
       }
-      this._play(this._anim.pickRandom(keys), msg);
-    }
-
-    _doDrink(force) {
-      console.log('[PixelBuddy] _doDrink called, busy=' + this._busy + ' force=' + !!force);
-      if (force && this._busy) this._dismissNow();
-      if (this._busy) return;
-      if (!this._anim) return;
-      const keys = this._anim.getByCategory('drink');
-      if (!keys.length) { console.warn('[PixelBuddy] drinkwater disabled'); return; }
-
-      const todayCount = WaterTracker.getCount();
-      const msg        = this._msgs.getDrinkMessage();
-
-      const actions = [
-        {
-          label: 'Done ✅',
-          cls:   'pb-act-done',
-          cb:    () => {
-            const n = WaterTracker.increment();
-            this._bubble.show(`💧 ${n} today — great job!`, 3);
-            setTimeout(() => this._dismissNow(), 3100);
-          }
-        },
-        {
-          label: '⏰ 5 min',
-          cls:   'pb-act-snooze',
-          cb:    () => {
-            this._dismissNow();
-            setTimeout(() => this._doDrink(true), 5 * 60000);
-          }
-        }
-      ];
-
-      this._play(this._anim.pickRandom(keys), msg, todayCount, actions);
-    }
-
-    _onKey(e) {
-      if (e.altKey && !['Alt','Control','Shift','Meta'].includes(e.key))
-        console.log('[PixelBuddy] keydown — altKey=true key=' + e.key + ' busy=' + this._busy);
-      const combo  = (this._s.general.shortcut || 'Alt+V');
-      const parts  = combo.toLowerCase().split('+').map(p => p.trim());
-      const key    = parts[parts.length - 1];
-      const needAlt   = parts.includes('alt');
-      const needCtrl  = parts.includes('ctrl') || parts.includes('control');
-      const needShift = parts.includes('shift');
-      const match = (e.altKey === needAlt && e.ctrlKey === needCtrl && e.shiftKey === needShift
-                     && e.key.toLowerCase() === key);
-      if (match) {
-        e.preventDefault(); e.stopPropagation();
-        console.log('[PixelBuddy] SHORTCUT MATCHED');
-        if (this._busy) this._dismissNow();
-        this._doGreeting();
-      }
-    }
-
-    _play(key, msg, waterCount, actions) {
-      console.log('[PixelBuddy] _play key=' + key + ' busy=' + this._busy);
-      if (this._busy) return;
-      this._busy = true;
-      if (!document.getElementById('pb-pet')) {
-        console.warn('[PixelBuddy] pet missing — rebuilding DOM');
-        this._buildDOM();
-        this._bubble = new SpeechBubbleManager(document.getElementById('pb-bubble'));
-      }
-      const pet = document.getElementById('pb-pet');
-      const img = document.getElementById('pb-gif');
-      if (!pet || !img) { console.error('[PixelBuddy] DOM missing'); this._busy = false; return; }
-      // Ensure pet has a rendered layout before triggering the CSS transition.
-      // display:none prevents any pixel from painting while the pet is idle.
-      pet.style.display = 'flex';
-      void pet.offsetWidth; // force synchronous layout so transition fires from opacity:0
-      pet.classList.add('pb-pet--visible');
-
-      if (actions && actions.length) {
-        setTimeout(() => {
-          const countHtml = (waterCount !== null && waterCount !== undefined)
-            ? `<div class='pb-water-count'>💧 ${waterCount} today</div>` : '';
-          const btnsHtml = actions.map(a =>
-            `<button class='pb-action ${a.cls}'>${a.label}</button>`).join('');
-          this._bubble.showWithActions(
-            `<div class='pb-bubble-msg'>${msg}</div>${countHtml}<div class='pb-bubble-btns'>${btnsHtml}</div>`,
-            0
-          );
-          actions.forEach(a => {
-            const btn = this._bubble._el.querySelector('.' + a.cls);
-            if (btn) btn.addEventListener('click', () => a.cb());
-          });
-        }, 400);
-      } else {
-        setTimeout(() => this._bubble.show(msg, this._s.timings.bubbleDuration), 400);
-      }
-
-      this._anim.play(key, img, () => {
-        this._bubble.hide();
-        pet.style.transition = 'opacity 0.5s ease';
-        pet.style.opacity    = '0';
-        setTimeout(() => {
-          pet.classList.remove('pb-pet--visible');
-          pet.style.display    = 'none';   // fully remove from paint tree — no ghost pixels
-          pet.style.transition = '';
-          pet.style.opacity    = '';
-          img.removeAttribute('src');      // clear src so no decoded frame stays in memory/GPU
-          this._busy = false;
-        }, 550);
-      }, this._s.timings.animationDuration);
-    }
-
-    _dismissNow() {
-      this._busy = false;           // release immediately so next action can proceed
-      this._anim && this._anim.stop();
-      this._bubble && this._bubble.hide();
-      const pet = document.getElementById('pb-pet');
-      if (pet) {
-        pet.style.transition = 'opacity 0.5s ease';
-        pet.style.opacity    = '0';
-        setTimeout(() => {
-          pet.classList.remove('pb-pet--visible');
-          pet.style.display    = 'none';
-          pet.style.transition = '';
-          pet.style.opacity    = '';
-          const imgEl = document.getElementById('pb-gif');
-          if (imgEl) imgEl.removeAttribute('src');
-        }, 550);
-      }
-    }
-
-    _openSettings() {
-      if (this._panelOpen) return;
-      this._panelOpen = true;
-      if (!this._panel) {
-        this._panel = new SettingsPanel(
-          this._s,
-          (newS) => {
-            this._s          = newS;
-            StorageManager.save(newS);
-            this._anim._s    = newS;
-            this._msgs._s    = newS;
-            this._panel._s   = newS;
-            this._reminders.stop();
-            this._reminders = new ReminderManager(newS,
-              () => this._doGreeting(), () => this._doDrink(true));
-            this._reminders.start();
-            this._panel.close();
-          },
-          () => { this._panelOpen = false; },
-          () => this._doDrink(true)
-        );
-      }
-      this._panel.open();
     }
 
     _buildDOM() {
-      const pet    = document.createElement('div'); pet.id = 'pb-pet';
-      const bubble = document.createElement('div'); bubble.id = 'pb-bubble';
-      const wrap   = document.createElement('div'); wrap.id = 'pb-gif-wrap';
-      const img    = document.createElement('img');
-      img.id = 'pb-gif'; img.alt = ''; img.draggable = false;
-      wrap.appendChild(img);
-      pet.appendChild(bubble);
-      pet.appendChild(wrap);
-      pet.style.display = 'none'; // hidden until first animation plays
+      const pet = document.createElement('div');
+      pet.id = 'pb-pet';
+      pet.innerHTML =
+        '<div id="pb-bubble"></div>'+
+        '<img id="pb-gif" alt="">';
       document.body.appendChild(pet);
+      // Right-click anywhere on the pet opens settings
+      pet.addEventListener('contextmenu', e=>{ e.preventDefault(); e.stopPropagation(); this._panel.open(); });
+      this._injectStyles();
+    }
+
+    _doGreeting() {
+      if (!this._s.general.enabled) return;
+      const _pet = document.getElementById('pb-pet');
+      if (_pet) _pet.style.display = 'flex';
+      const key = this._anim.pickFromCategory('greeting');
+      this._anim.play(key, this._s.timings.animationDuration, null);
+      if (this._s.general.bubbleEnabled && this._s.messages.greetingEnabled) {
+        setTimeout(()=>{
+          this._bubble.show(this._msg.getGreetingMessage(), this._s.timings.bubbleDuration);
+        }, 600);
+      }
+    }
+
+    _doDrink() {
+      if (!this._s.general.enabled) return;
+      const _pet = document.getElementById('pb-pet');
+      if (_pet) _pet.style.display = 'flex';
+      this._water.increment();
+      const key = this._anim.pickFromCategory('drink');
+      this._anim.play(key, this._s.timings.animationDuration, null);
+      if (this._s.general.bubbleEnabled && this._s.messages.drinkEnabled) {
+        setTimeout(()=>{
+          this._bubble.showWithActions(
+            this._msg.getDrinkMessage(),
+            this._s.timings.bubbleDuration,
+            null,
+            ()=>setTimeout(()=>this._doDrink(), 5*60*1000)
+          );
+        }, 600);
+      }
+    }
+
+    _onSave(s, action) {
+      if (action === 'reset-msg-history')   { this._msg.resetQueues(); return; }
+      if (action === 'reset-anim-history')  { this._anim&&this._anim.resetQueues(); return; }
+      if (action === 'reload')              { StorageManager.save(s); location.reload(); return; }
+      if (action === 'preview-greeting')    { this._doGreeting(); return; }
+      if (action === 'test-drink')          { this._doDrink(); return; }
+
+      // Live save — keep panel open
+      this._s = s;
+      StorageManager.save(s);
+      if (this._anim)   this._anim._s  = s;
+      if (this._msg)    this._msg._s   = s;
+      if (this._remind) this._remind.restart(s);
+      this._applyAppearance(s);
+      this._registerShortcut();
+
+      const pet = document.getElementById('pb-pet');
+      if (pet) pet.style.display = s.general.enabled ? 'flex' : 'none';
+
+      // Start/stop reminders based on enabled state
+      if (s.general.enabled && !this._remind) {
+        this._remind = new ReminderManager(()=>this._doGreeting(), ()=>this._doDrink());
+        this._remind.start(s);
+      } else if (!s.general.enabled && this._remind) {
+        this._remind.stop();
+      }
+    }
+
+    _applyAppearance(s) {
+      const pet = document.getElementById('pb-pet'); if (!pet) return;
+      const img = document.getElementById('pb-gif');
+      if (img) img.style.height = (s.appearance.petSize||160)+'px';
+      pet.style.opacity = String(s.appearance.petOpacity||1);
+      const [v,h] = (s.appearance.position||'bottom-right').split('-');
+      pet.style.bottom = v==='bottom'?'10px':'auto';
+      pet.style.top    = v==='top'   ?'20px':'auto';
+      pet.style.right  = h==='right' ?'10px':'auto';
+      pet.style.left   = h==='left'  ?'20px':'auto';
+    }
+
+    _registerShortcut() {
+      if (this._scH) document.removeEventListener('keydown', this._scH);
+      const raw = (this._s.general.shortcut||'Alt+V').toLowerCase();
+      this._scH = e=>{
+        const p=[];
+        if(e.ctrlKey)  p.push('ctrl');
+        if(e.altKey)   p.push('alt');
+        if(e.shiftKey) p.push('shift');
+        if(e.metaKey)  p.push('meta');
+        p.push(e.key.toLowerCase());
+        if(p.join('+')===raw){
+          e.preventDefault();
+          this._doGreeting();
+        }
+      };
+      document.addEventListener('keydown', this._scH);
     }
 
     _injectStyles() {
-      const css = [
-        '#pb-pet,#pb-bubble,#pb-gif-wrap,#pb-gif,#pb-settings,#pb-settings *{box-sizing:border-box;font-family:Segoe UI,system-ui,sans-serif;}',
-        '#pb-pet{position:fixed;bottom:0;right:12px;display:flex;flex-direction:column;align-items:flex-end;z-index:2147483639;pointer-events:none;transform:translateY(220px);opacity:0;transition:transform .45s cubic-bezier(.34,1.56,.64,1),opacity .35s ease;}',
-        '#pb-pet.pb-pet--visible{transform:translateY(0);opacity:1;}',
-        '#pb-bubble{position:relative;background:#1e1e32;color:#e8e6f0;border:1px solid #3a3a58;border-radius:16px;padding:11px 18px;font-size:13.5px;font-weight:500;line-height:1.45;max-width:min(240px,calc(100vw - 32px));text-align:center;box-shadow:0 6px 20px rgba(0,0,0,.45);margin-bottom:6px;opacity:0;transform:translateY(10px) scale(.96);transition:opacity .3s ease,transform .3s cubic-bezier(.34,1.56,.64,1);pointer-events:none;}',
-        '#pb-bubble.pb-bubble--visible{opacity:1;transform:translateY(0) scale(1);}',
-        '#pb-bubble.pb-bubble--interactive{pointer-events:auto;}',
-        '#pb-bubble::after{content:\'\';position:absolute;bottom:-9px;right:26px;width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-top:9px solid #1e1e32;}',
-        '.pb-bubble-msg{margin-bottom:5px;}',
-        '.pb-water-count{font-size:11.5px;color:#7ecfff;margin-bottom:9px;letter-spacing:.3px;}',
-        '.pb-bubble-btns{display:flex;gap:8px;justify-content:center;margin-top:2px;}',
-        '.pb-action{background:#252540;border:1px solid #3a3a5a;color:#e8e6f0;font-size:12px;font-weight:600;padding:5px 13px;border-radius:8px;cursor:pointer;transition:background .2s,border-color .2s,transform .1s;line-height:1.4;}',
-        '.pb-action:hover{transform:scale(1.04);}',
-        '.pb-act-done:hover{background:#2a5c3a;border-color:#4a9c6a;color:#90ffb8;}',
-        '.pb-act-snooze:hover{background:#2a2a5c;border-color:#6a6abf;color:#b8b8ff;}',
-        '#pb-gif-wrap{display:flex;align-items:flex-end;background:none;pointer-events:auto;cursor:context-menu;}',
-        '#pb-gif{height:160px;width:auto;display:block;image-rendering:-webkit-optimize-contrast;image-rendering:auto;transform:translateZ(0);will-change:transform;backface-visibility:hidden;}',
-        '#pb-settings{position:fixed;top:0;right:0;width:380px;height:100vh;background:#0d0d1c;border-left:1px solid #2a2a4a;z-index:2147483641;transform:translateX(100%);transition:transform .35s cubic-bezier(.4,0,.2,1);overflow-y:auto;pointer-events:none;}',
-        '#pb-settings.pb-settings--open{transform:translateX(0);pointer-events:all;}',
-        '.pb-si{padding:20px;}',
-        '.pb-sh{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}',
-        '.pb-st{font-size:17px;font-weight:700;color:#c9b8ff;}',
-        '.pb-sc{background:none;border:none;color:#888;font-size:20px;cursor:pointer;line-height:1;padding:4px 8px;border-radius:6px;transition:color .2s,background .2s;}',
-        '.pb-sc:hover{color:#fff;background:#2a2a4a;}',
-        '.pb-tabs{display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap;}',
-        '.pb-tab{background:#16162a;border:1px solid #2a2a4a;color:#888;font-size:12px;font-weight:600;padding:6px 12px;border-radius:8px;cursor:pointer;transition:all .2s;}',
-        '.pb-tab:hover{color:#c9b8ff;border-color:#8b6cf7;}',
-        '.pb-tab.active{background:#8b6cf7;border-color:#8b6cf7;color:#fff;}',
-        '.pb-tc{min-height:180px;}',
-        '.pb-panel{display:none;}',
-        '.pb-panel.active{display:block;}',
-        '.pb-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e1e38;color:#b0aac8;font-size:14px;cursor:default;}',
-        '.pb-row input[type=text],.pb-row input[type=number]{background:#16162a;border:1px solid #2a2a4a;color:#e8e6f0;padding:5px 10px;border-radius:8px;width:110px;font-size:13px;outline:none;}',
-        '.pb-row input[type=text]:focus,.pb-row input[type=number]:focus{border-color:#8b6cf7;}',
-        '.pb-row input[type=checkbox]{width:18px;height:18px;cursor:pointer;accent-color:#8b6cf7;}',
-        '.pb-msg-section{margin-top:14px;}',
-        '.pb-msg-label{color:#b0aac8;font-size:13px;font-weight:600;margin-bottom:6px;}',
-        '.pb-msg-hint{color:#6a6a8a;font-size:11px;font-weight:400;}',
-        '.pb-textarea{width:100%;background:#16162a;border:1px solid #2a2a4a;color:#e8e6f0;padding:8px 10px;border-radius:8px;font-size:12px;font-family:Segoe UI,system-ui,sans-serif;resize:vertical;min-height:82px;outline:none;line-height:1.55;display:block;}',
-        '.pb-textarea:focus{border-color:#8b6cf7;}',
-        '.pb-sf{display:flex;gap:10px;margin-top:24px;}',
-        '.pb-btn{flex:1;padding:10px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;border:none;transition:all .2s;}',
-        '.pb-btn-save{background:#8b6cf7;color:#fff;}',
-        '.pb-btn-save:hover{background:#7c5ef5;}',
-        '.pb-btn-reset{background:#16162a;color:#888;border:1px solid #2a2a4a;}',
-        '.pb-btn-reset:hover{color:#e88;border-color:#e88;}',
-        '.pb-hint{color:#6a6a8a;font-size:12px;line-height:1.6;margin:8px 0 4px;padding:0 2px;}',
-        '.pb-btn-test{background:#16162a;border:1px solid #2a2a4a;color:#8b6cf7;font-size:12px;font-weight:600;padding:5px 14px;border-radius:8px;cursor:pointer;transition:all .2s;}',
-        '.pb-btn-test:hover{background:#8b6cf7;color:#fff;border-color:#8b6cf7;}',
-        '#s-shortcut{cursor:pointer;text-align:center;font-weight:700;letter-spacing:.5px;}'
-      ].join('\n');
-      const style = document.createElement('style');
-      style.id = 'pb-styles';
-      style.textContent = css;
-      document.head.appendChild(style);
+      if (document.getElementById('pb-styles')) return;
+      const st = document.createElement('style');
+      st.id = 'pb-styles'; st.textContent = PB_CSS;
+      document.head.appendChild(st);
     }
   }
 
-  // BOOTSTRAP
-  new PixelBuddy().init();
+  // Bootstrap
+  window._pb = new PixelBuddy();
+  window._pb.init();
 
 })();
