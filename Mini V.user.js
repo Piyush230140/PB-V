@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Pixel Buddy
 // @namespace    http://tampermonkey.net/
-// @version      3.13.0
+// @version      2.6.0
 // @description  Desktop companion -- real GIF animations, speech bubbles, smart reminders
 // @match        *://*/*
 // @grant        GM_setValue
