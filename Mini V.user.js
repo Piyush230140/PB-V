@@ -18,31 +18,31 @@
 
   // DEFAULT MESSAGE POOLS (fallback when user has no custom messages saved)
   const DEFAULT_GREETING_POOL = [
-    "You're beautiful! 💙",
-    "Have a wonderful day! ☀️",
-    "You've got this! 💪",
-    "Hello there! 👋",
-    "Great to see you! 😊",
+    "You're beautiful Varshiii! 💙",
+    "Have a wonderful day Madam! ☀️",
+    "You've got this yedeyy! 💪",
+    "Hello there princess! 👋",
+    "You slay You DIVA! 😊",
     "Hope you're having a good day!",
     "You're doing amazing! ✨",
     "Keep up the great work! 🌟",
-    "Smile! You deserve it! 😄",
-    "Today is your day! 🎉"
+    "Smile! It suits you the most! 😄",
+    "Today is your day bitch, own it! 🎉"
   ];
   const DEFAULT_DRINK_POOL = [
-    "Drink some water! 💧",
-    "Stay hydrated! 💦",
-    "Time for a water break! 🥤",
-    "Don't forget to drink water!",
-    "Your body needs water! 💧",
-    "Hydration is key! 🌊",
-    "Take a sip! 💦"
+    "Drink some NILUU! 💧",
+    "Stay hydrated Sethh! 💦",
+    "Time for a water break You Hardworker! 🥤",
+    "Don't forget to drink water V!",
+    "Your body needs water and vitamin me! 💧",
+    "Hydration is key to the lock of washroom! 🌊",
+    "Take a sip Queen!!!"
   ];
   const DEFAULT_SLEEP_POOL = [
     "Time to rest your eyes! 😴",
     "Take a break! 🌙",
     "Maybe it's time to sleep? 💤",
-    "Rest is important too! 🌛",
+    "Rest is important too yedeyy! 🌛",
     "Your eyes need rest! 👀"
   ];
 
